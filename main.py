@@ -1,5 +1,4 @@
 import io
-
 import streamlit as st
 from PIL import Image
 
@@ -12,45 +11,45 @@ from export_service import prepare_downloads
 from database import save_project
 
 
-# ---------------------------------------------------------
-# PAGE CONFIGURATION
-# ---------------------------------------------------------
+# --------------------------------------------------
+# PAGE CONFIG
+# --------------------------------------------------
+
 st.set_page_config(
     page_title=APP_NAME,
-    page_icon="🛒",
+    page_icon="🎨",
     layout="wide",
 )
 
 
-# ---------------------------------------------------------
+# --------------------------------------------------
 # HEADER
-# ---------------------------------------------------------
-st.title("🛒 Atta Visuals")
-st.subheader("AI-Powered Amazon Product Listing Visual Generator")
+# --------------------------------------------------
 
-st.caption(
-    "Upload one product image → create 7 professional listing visuals "
-    "→ edit English/Urdu text → export in high quality."
+st.title("🎨 Atta Visuals")
+
+st.write(
+    "Upload your product image and add a product description. "
+    "Atta Visuals will create professional Amazon listing visuals."
 )
 
 
-# ---------------------------------------------------------
-# SIDEBAR SETTINGS
-# ---------------------------------------------------------
+# --------------------------------------------------
+# SIDEBAR
+# --------------------------------------------------
+
 with st.sidebar:
+
     st.header("⚙️ Settings")
-
-    size_options = list(SUPPORTED_SIZES.keys())
-
-    if DEFAULT_SIZE in size_options:
-        default_index = size_options.index(DEFAULT_SIZE)
-    else:
-        default_index = 0
 
     selected_size = st.selectbox(
         "Output Size",
-        options=size_options,
-        index=default_index,
+        options=list(SUPPORTED_SIZES.keys()),
+        index=(
+            list(SUPPORTED_SIZES.keys()).index(DEFAULT_SIZE)
+            if DEFAULT_SIZE in SUPPORTED_SIZES
+            else 0
+        ),
     )
 
     export_format = st.selectbox(
@@ -58,247 +57,205 @@ with st.sidebar:
         ["PNG", "JPG"],
     )
 
-    st.divider()
 
-    st.info(
-        "Groq AI is used for product understanding and listing copy. "
-        "The final graphics are rendered locally with Python so the "
-        "text remains editable."
-    )
+# --------------------------------------------------
+# PRODUCT IMAGE
+# --------------------------------------------------
 
+st.subheader("📷 Product Image")
 
-# ---------------------------------------------------------
-# PRODUCT IMAGE UPLOAD
-# ---------------------------------------------------------
-uploaded = st.file_uploader(
-    "📷 Upload Your Product Image",
+uploaded_file = st.file_uploader(
+    "Upload one product image",
     type=["png", "jpg", "jpeg", "webp"],
-    help=(
-        "Upload one clear product photo. "
-        "Avoid collages for better product analysis."
-    ),
 )
 
 
-# ---------------------------------------------------------
-# OPTIONAL PRODUCT INFORMATION
-# ---------------------------------------------------------
-product_details = st.text_area(
-    "📝 Optional Product Details",
+# --------------------------------------------------
+# PRODUCT DESCRIPTION
+# --------------------------------------------------
+
+st.subheader("📝 Product Description")
+
+product_description = st.text_area(
+    "Describe your product",
     placeholder=(
-        "Add only facts you know, for example:\n"
-        "Brand: ABC\n"
-        "Material: Stainless Steel\n"
-        "Capacity: 1 Liter\n"
-        "Dimensions: 20 × 10 cm\n"
-        "Compatibility: XYZ"
+        "Example:\n"
+        "This is a stainless steel water bottle with 1 liter capacity. "
+        "It is leak-proof, reusable and suitable for gym, office and travel."
     ),
+    height=150,
 )
 
 
-# ---------------------------------------------------------
-# SHOW UPLOADED IMAGE
-# ---------------------------------------------------------
-if uploaded:
+# --------------------------------------------------
+# SHOW IMAGE
+# --------------------------------------------------
 
-    image_bytes = uploaded.getvalue()
+product_image = None
+image_bytes = None
+
+if uploaded_file:
+
+    image_bytes = uploaded_file.getvalue()
 
     try:
+
         product_image = Image.open(
             io.BytesIO(image_bytes)
         ).convert("RGB")
 
-    except Exception:
-        st.error(
-            "❌ Unable to read this image. "
-            "Please upload a valid PNG, JPG, JPEG, or WEBP image."
-        )
-        st.stop()
-
-    left, right = st.columns([1, 1])
-
-    with left:
-        st.subheader("🖼️ Original Product")
-
         st.image(
             product_image,
-            use_container_width=True,
+            caption="Your Product",
+            width=400,
         )
 
-    with right:
-        st.subheader("✨ What Atta Visuals Creates")
+    except Exception as exc:
 
-        st.markdown(
-            """
-            **7 Amazon Listing Visuals**
-
-            1. 🖼️ Main Product Image
-            2. ⭐ Main Features
-            3. 💡 Key Benefits
-            4. 📖 How to Use
-            5. 📏 Dimensions / Specifications
-            6. 🏠 Lifestyle / Real-World Use
-            7. 👑 Brand / Premium Closing
-            """
+        st.error(
+            f"Could not read the image: {exc}"
         )
 
-        st.divider()
+        st.stop()
 
-        generate_button = st.button(
-            "✨ Generate 7 Listing Images",
-            type="primary",
-            use_container_width=True,
-        )
 
-        # -------------------------------------------------
-        # GENERATE LISTING IMAGES
-        # -------------------------------------------------
-        if generate_button:
+# --------------------------------------------------
+# GENERATE BUTTON
+# --------------------------------------------------
 
-            try:
+if uploaded_file and product_description.strip():
 
-                with st.status(
-                    "Creating your listing visuals...",
-                    expanded=True,
-                ) as status:
+    st.divider()
 
-                    # STEP 1
-                    st.write(
-                        "🔍 Step 1/4 — Analyzing product with Groq AI..."
-                    )
+    generate_button = st.button(
+        "✨ Create Amazon Listing Images",
+        type="primary",
+        use_container_width=True,
+    )
 
-                    analysis = analyze_product(
-                        image_bytes,
-                        product_details,
-                    )
+    if generate_button:
 
-                    # STEP 2
-                    st.write(
-                        "🧠 Step 2/4 — Creating 7-image listing strategy..."
-                    )
+        try:
 
-                    plan = create_listing_plan(
-                        analysis,
-                        product_details,
-                    )
+            with st.status(
+                "Creating your Amazon listing visuals...",
+                expanded=True,
+            ) as status:
 
-                    # STEP 3
-                    st.write(
-                        "🎨 Step 3/4 — Rendering high-resolution visuals..."
-                    )
+                # ----------------------------------
+                # STEP 1: AI PRODUCT ANALYSIS
+                # ----------------------------------
 
-                    images = generate_listing_images(
-                        product_image,
-                        plan,
-                        selected_size,
-                    )
-
-                    # STEP 4
-                    st.write(
-                        "💾 Step 4/4 — Saving project..."
-                    )
-
-                    # Save everything in session
-                    st.session_state["analysis"] = analysis
-                    st.session_state["plan"] = plan
-                    st.session_state["images"] = images
-                    st.session_state["original"] = product_image
-                    st.session_state["size_name"] = selected_size
-                    st.session_state["export_format"] = export_format
-
-                    # Save project to database
-                    save_project(
-                        analysis,
-                        plan,
-                    )
-
-                    status.update(
-                        label="✅ Done — 7 listing visuals are ready!",
-                        state="complete",
-                    )
-
-                st.success(
-                    "🎉 Your 7 Amazon listing visuals have been created!"
+                st.write(
+                    "🔍 AI is understanding your product..."
                 )
 
-            except Exception as exc:
-
-                st.error(
-                    "❌ Generation failed."
+                analysis = analyze_product(
+                    image_bytes,
+                    product_description,
                 )
 
-                st.exception(exc)
+
+                # ----------------------------------
+                # STEP 2: CREATE LISTING STRATEGY
+                # ----------------------------------
+
+                st.write(
+                    "🧠 AI is creating the listing content..."
+                )
+
+                plan = create_listing_plan(
+                    analysis,
+                    product_description,
+                )
 
 
-# ---------------------------------------------------------
+                # ----------------------------------
+                # STEP 3: CREATE 7 VISUALS
+                # ----------------------------------
+
+                st.write(
+                    "🎨 Creating 7 Amazon listing visuals..."
+                )
+
+                images = generate_listing_images(
+                    product_image,
+                    plan,
+                    selected_size,
+                )
+
+
+                # ----------------------------------
+                # SAVE RESULTS
+                # ----------------------------------
+
+                st.session_state["analysis"] = analysis
+                st.session_state["plan"] = plan
+                st.session_state["images"] = images
+                st.session_state["original"] = product_image
+                st.session_state["size_name"] = selected_size
+                st.session_state["export_format"] = export_format
+
+                save_project(
+                    analysis,
+                    plan,
+                )
+
+
+                status.update(
+                    label="✅ Your 7 listing images are ready!",
+                    state="complete",
+                )
+
+
+        except Exception as exc:
+
+            st.error(
+                "❌ Something went wrong while creating the visuals."
+            )
+
+            st.exception(exc)
+
+
+elif uploaded_file and not product_description.strip():
+
+    st.info(
+        "📝 Please add a product description before generating."
+    )
+
+
+# --------------------------------------------------
 # EDITOR
-# ---------------------------------------------------------
+# --------------------------------------------------
+
 if "images" in st.session_state:
 
     st.divider()
 
     st.header("✏️ Edit Your Listing Images")
 
-    st.write(
-        "Edit your English or Urdu headline and supporting text "
-        "before downloading."
+    edited_images = render_editor(
+        st.session_state["images"],
+        st.session_state["plan"],
+        st.session_state["size_name"],
     )
 
-    try:
-
-        edited_images = render_editor(
-            st.session_state["images"],
-            st.session_state["plan"],
-            st.session_state["size_name"],
-        )
-
-        st.session_state["images"] = edited_images
-
-    except Exception as exc:
-
-        st.error(
-            "❌ Image editor could not be loaded."
-        )
-
-        st.exception(exc)
+    st.session_state["images"] = edited_images
 
 
-# ---------------------------------------------------------
-# DOWNLOAD SECTION
-# ---------------------------------------------------------
+# --------------------------------------------------
+# DOWNLOAD
+# --------------------------------------------------
+
 if "images" in st.session_state:
 
     st.divider()
 
-    st.header("⬇️ Download Your Images")
+    st.header("⬇️ Download")
 
-    st.write(
-        "Download individual images or all 7 visuals together."
+    prepare_downloads(
+        st.session_state["images"],
+        st.session_state["plan"],
+        st.session_state["size_name"],
+        st.session_state["export_format"],
     )
-
-    try:
-
-        prepare_downloads(
-            st.session_state["images"],
-            st.session_state["plan"],
-            st.session_state["size_name"],
-            st.session_state["export_format"],
-        )
-
-    except Exception as exc:
-
-        st.error(
-            "❌ Download section could not be loaded."
-        )
-
-        st.exception(exc)
-
-
-# ---------------------------------------------------------
-# FOOTER
-# ---------------------------------------------------------
-st.divider()
-
-st.caption(
-    "Atta Visuals — Turning One Product Image Into a Complete Amazon Visual Listing."
-)
